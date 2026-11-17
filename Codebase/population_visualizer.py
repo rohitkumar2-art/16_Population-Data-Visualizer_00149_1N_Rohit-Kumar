@@ -2,138 +2,141 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
-# Required CSV columns
-REQUIRED_COLUMNS = ["City", "Year", "Population"]
+
+# CSV file location
+FILE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "population.csv"
+)
 
 
 # 1. Load and clean population data
 def load_data():
 
     try:
-        file_path = "population.csv"
+        df = pd.read_csv(FILE_PATH)
 
-        if not os.path.exists(file_path):
-            raise FileNotFoundError("population.csv file not found!")
-
-        df = pd.read_csv(file_path)
-
+        # Check empty CSV
         if df.empty:
             print("Error: CSV file is empty!")
             return None
 
         # Check required columns
-        if not all(col in df.columns for col in REQUIRED_COLUMNS):
-            print("Error: Required CSV columns are missing!")
+        required = ["City", "Year", "Population"]
+
+        if not all(col in df.columns for col in required):
+            print("Error: CSV columns are incorrect!")
             return None
 
-        # Clean city names
-        df["City"] = df["City"].astype("string").str.strip()
+        valid_records = []
 
-        df = df.dropna(subset=["City"])
-        df = df[df["City"] != ""]
+        # Validate each row
+        for row_number, (_, row) in enumerate(
+            df.iterrows(), start=1
+        ):
 
-        # Convert Year and Population into numeric values
-        df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
-        df["Population"] = pd.to_numeric(
-            df["Population"], errors="coerce"
+            city = row["City"]
+            year = row["Year"]
+            population = row["Population"]
+
+            # Check city name
+            if pd.isna(city) or str(city).strip() == "":
+                print(f"Row {row_number} skipped: City name missing.")
+                continue
+
+            city = str(city).strip()
+
+            # Validate year
+            try:
+                year = float(year)
+
+                if pd.isna(year) or year <= 0 or not year.is_integer():
+                    print(
+                        f"Row {row_number} skipped: "
+                        f"Year must be a positive integer."
+                    )
+                    continue
+
+            except (ValueError, TypeError):
+                print(
+                    f"Row {row_number} skipped: invalid Year '{row['Year']}'."
+                )
+                continue
+
+            # Validate population
+            try:
+                population = float(population)
+
+                if pd.isna(population):
+                    print(
+                        f"Row {row_number} skipped: "
+                        f"invalid Population '{row['Population']}'."
+                    )
+                    continue
+
+                if population <= 0:
+                    print(
+                        f"Row {row_number} skipped: "
+                        f"Population must be positive."
+                    )
+                    continue
+
+            except (ValueError, TypeError):
+                print(
+                    f"Row {row_number} skipped: "
+                    f"invalid Population '{row['Population']}'."
+                )
+                continue
+
+            # Store valid records
+            valid_records.append({
+                "City": city,
+                "Year": int(year),
+                "Population": population
+            })
+
+        # Create cleaned DataFrame
+        clean_df = pd.DataFrame(
+            valid_records,
+            columns=required
         )
-
-        # Check valid years
-        valid_year = (
-            df["Year"].notna() &
-            (df["Year"] > 0) &
-            (df["Year"] % 1 == 0)
-        )
-
-        # Check valid population
-        valid_population = (
-            df["Population"].notna() &
-            (df["Population"] > 0) &
-            (df["Population"] % 1 == 0)
-        )
-
-        # Remove invalid records
-        invalid_rows = ~(valid_year & valid_population)
-
-        for index in df.index[invalid_rows]:
-            print(f"Invalid record at row {index + 2} rejected.")
-
-        df = df[valid_year & valid_population].copy()
-
-        # Convert values to integers
-        df["Year"] = df["Year"].astype(int)
-        df["Population"] = df["Population"].astype(int)
 
         # Remove duplicate records
-        before = len(df)
-
-        df = df.drop_duplicates(
+        clean_df = clean_df.drop_duplicates(
             subset=["City", "Year", "Population"]
         )
 
-        removed = before - len(df)
+        print("\nPopulation data loaded successfully!")
+        print("Valid records:", len(clean_df))
 
-        if removed > 0:
-            print(f"{removed} duplicate records removed.")
-
-        if df.empty:
-            print("Error: No valid records available!")
+        if clean_df.empty:
+            print("No valid population records found!")
             return None
 
-        print("\nPopulation data loaded successfully!")
-        print("Valid records:", len(df))
+        return clean_df
 
-        return df
-
-    except FileNotFoundError as e:
-        print("Error:", e)
+    except FileNotFoundError:
+        print("Error: population.csv file not found!")
+        return None
 
     except PermissionError:
-        print("Error: File permission denied!")
+        print("Error: Permission denied while reading CSV file!")
+        return None
 
     except pd.errors.EmptyDataError:
         print("Error: CSV file is empty!")
+        return None
 
     except pd.errors.ParserError:
         print("Error: CSV file format is incorrect!")
+        return None
 
     except Exception as e:
         print("Unexpected error:", e)
-
-    return None
-
-
-# 2. Calculate population summary
-def show_summary(df):
-
-    try:
-        latest_year = df["Year"].max()
-
-        latest_data = df[df["Year"] == latest_year]
-
-        total = latest_data["Population"].sum()
-
-        largest = latest_data.loc[
-            latest_data["Population"].idxmax()
-        ]
-
-        print("\n------ POPULATION SUMMARY ------")
-
-        print("Latest Year:", latest_year)
-
-        print("Total Population:", int(total))
-
-        print(
-            "Largest City:",
-            largest["City"],
-            "(" + str(int(largest["Population"])) + ")"
-        )
-
-    except Exception as e:
-        print("Error calculating summary:", e)
+        return None
 
 
-# 3. Calculate city-wise population growth
+# 2. Calculate city-wise population growth
 def calculate_growth(df):
 
     growth_list = []
@@ -146,7 +149,6 @@ def calculate_growth(df):
 
         # Growth requires at least two different years
         if city_data["Year"].nunique() < 2:
-            print(f"{city}: Growth not available.")
             continue
 
         first = city_data.iloc[0]["Population"]
@@ -162,64 +164,112 @@ def calculate_growth(df):
     return growth_list
 
 
-# 4. Show growth and fastest-growing city
-def show_growth(df):
-
-    growth_list = calculate_growth(df)
-
-    print("\n------ POPULATION GROWTH ------")
-
-    if not growth_list:
-        print("Growth not available (only one year of data).")
-        return None
-
-    for city, growth in growth_list:
-        print(f"{city}: {growth:+.2f}%")
-
-    fastest = max(growth_list, key=lambda x: x[1])
-
-    print(
-        "\nFastest-Growing City:",
-        fastest[0],
-        f"({fastest[1]:+.2f}%)"
-    )
-
-    return growth_list
-
-
-# 5. Generate Bar Chart
-def show_bar_chart(growth_list):
+# 3. Calculate and display population summary
+def show_summary(df):
 
     try:
-        if not growth_list:
-            print("No growth data available for Bar Chart.")
-            return
+        latest_year = df["Year"].max()
 
-        cities = [item[0] for item in growth_list]
-        growth = [item[1] for item in growth_list]
+        latest_data = df[
+            df["Year"] == latest_year
+        ]
 
-        plt.figure(figsize=(9, 5))
+        total = latest_data["Population"].sum()
 
-        plt.bar(cities, growth)
+        largest = latest_data.loc[
+            latest_data["Population"].idxmax()
+        ]
 
-        plt.title("Population Growth by City")
-        plt.xlabel("City")
-        plt.ylabel("Population Growth (%)")
+        print("\n------ POPULATION SUMMARY ------")
 
-        plt.axhline(y=0, color="black", linewidth=0.8)
-        plt.grid(axis="y", linestyle="--", alpha=0.5)
+        print("Latest Year:", int(latest_year))
 
-        plt.tight_layout()
-        plt.show()
+        print("Total Population:", int(total))
+
+        print(
+            "Largest City:",
+            largest["City"],
+            "(" + str(int(largest["Population"])) + ")"
+        )
+
+        # Find fastest-growing city
+        growth_list = calculate_growth(df)
+
+        if growth_list:
+
+            fastest = max(
+                growth_list,
+                key=lambda x: x[1]
+            )
+
+            print(
+                "Fastest growing:",
+                fastest[0],
+                f"({fastest[1]:+.2f}%)"
+            )
+
+        else:
+            print(
+                "Growth: not available "
+                "(only one year of data)"
+            )
 
     except Exception as e:
-        print("Error generating Bar Chart:", e)
+        print("Error calculating summary:", e)
 
 
-# 6. Generate Line Chart
-def show_line_chart(df):
+# 4. Show city-wise growth and charts
+def show_growth_and_charts(df):
 
     try:
+        growth_list = calculate_growth(df)
+
+        print("\n------ POPULATION GROWTH ------")
+
+        if growth_list:
+
+            for city, growth in growth_list:
+                print(f"{city}: {growth:+.2f}%")
+
+            fastest = max(
+                growth_list,
+                key=lambda x: x[1]
+            )
+
+            print(
+                "\nFastest-Growing City:",
+                fastest[0],
+                f"({fastest[1]:+.2f}%)"
+            )
+
+            # Bar Chart: Population Growth by City
+            cities = [
+                item[0] for item in growth_list
+            ]
+
+            growth_values = [
+                item[1] for item in growth_list
+            ]
+
+            plt.figure(figsize=(9, 5))
+
+            plt.bar(cities, growth_values)
+
+            plt.title("Population Growth by City")
+            plt.xlabel("City")
+            plt.ylabel("Growth Percentage (%)")
+
+            plt.grid(axis="y")
+            plt.tight_layout()
+            plt.show()
+
+        else:
+            print(
+                "Growth not available "
+                "(only one year of data)."
+            )
+
+        # Line Chart: Population Trend
         plt.figure(figsize=(9, 5))
 
         for city in df["City"].unique():
@@ -235,31 +285,20 @@ def show_line_chart(df):
                 label=city
             )
 
-        plt.title("Population Trend Over the Years")
+        plt.title("Population Trend")
         plt.xlabel("Year")
         plt.ylabel("Population")
 
         plt.legend()
         plt.grid(True)
-
         plt.tight_layout()
         plt.show()
 
     except Exception as e:
-        print("Error generating Line Chart:", e)
+        print("Error displaying charts:", e)
 
 
-# 7. Growth and Charts menu option
-def show_charts(df):
-
-    growth_list = show_growth(df)
-
-    show_bar_chart(growth_list)
-
-    show_line_chart(df)
-
-
-# 8. Main menu
+# 5. Main menu
 def main():
 
     df = load_data()
@@ -285,11 +324,11 @@ def main():
 
         elif choice == "2":
 
-            show_charts(df)
+            show_growth_and_charts(df)
 
         elif choice == "3":
 
-            print("\nThank you for using Population Data Visualizer!")
+            print("Thank you! Program closed.")
             break
 
         else:
@@ -297,14 +336,7 @@ def main():
             print("Invalid choice! Please enter 1, 2 or 3.")
 
 
-# 9. Run the program
+# Run the program
 if __name__ == "__main__":
+    main()
 
-    try:
-        main()
-
-    except KeyboardInterrupt:
-        print("\nProgram interrupted by user.")
-
-    except Exception as e:
-        print("Unexpected runtime error:", e)
