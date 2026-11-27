@@ -62,12 +62,6 @@ Durg,2020,500000
 Durg,2024,600000
 ```
 
-## Expected Results
-
-- Total Population (2024): 1700000
-- Largest City: Raipur (1100000)
-- Fastest-Growing City: Durg (+20.00%)
-
 ## Conclusion
 
 This project demonstrates the use of Python, Pandas and Matplotlib for population data analysis and visualization.
