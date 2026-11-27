@@ -66,4 +66,3 @@ Durg,2024,600000
 
 This project demonstrates the use of Python, Pandas and Matplotlib for population data analysis and visualization.
 
-**Developed by:** Rohit Kumar
